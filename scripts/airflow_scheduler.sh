@@ -8,4 +8,4 @@ export AIRFLOW__CORE__DAGS_FOLDER="$(pwd)/dags"
 
 source venv/bin/activate
 
-airflow webserver --port 8080 
+airflow scheduler
