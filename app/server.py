@@ -16,9 +16,10 @@ import pandas as pd
 # model = mlflow.pyfunc.load_model(MODEL_URI)
 
 # ----- Config -----
+MODEL_VERSION       = "2"
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000") # update ip when running MLFlow
 MODEL_NAME = os.getenv("MODEL_NAME", "iris-classifier")
-DEFAULT_MODEL_VERSION = int(os.getenv("MODEL_VERSION", "1")) # optional: seed a default on first boot, otherwise get the latest
+DEFAULT_MODEL_VERSION = int(os.getenv("MODEL_VERSION", "2")) # optional: seed a default on first boot, otherwise get the latest
 STATE_PATH = os.getenv("MODEL_STATE_PATH", "./model_state.json")
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
@@ -128,7 +129,7 @@ class VersionedModelManager:
                 try:
                     uri, model = self._load_model(v)
                     self._model = model
-                    self._state - ModelState(
+                    self._state = ModelState(
                         model_name=self.model_name, version=int(v), uri=uri, loaded_at=time.time()    
                     )
                     self._persist(self._state)
@@ -168,7 +169,7 @@ class VersionedModelManager:
     def predict(self, records: List[dict]):
         with self._lock:
             if self._model is None:
-                raise RuntimeError("Modle not loaded")
+                raise RuntimeError("Model not loaded")
             df = pd.DataFrame.from_records(records)
             y = self._model.predict(df)
             # normalize to list of ints (common for iris)
@@ -188,7 +189,8 @@ app = FastAPI(
 
 @app.get("/health", tags=["health"])
 def health():
-    return {"status": "ok", "model_uri": MODEL_URI}
+    st = manager.current()
+    return {"status": "ok", "model_uri": st.uri, "model_version": st.version}
 
 # TODO Add endpoint to get the current model serving version
 @app.get("/model", tags=["model"], summary="Get current model version")
