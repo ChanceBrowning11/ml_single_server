@@ -7,19 +7,11 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 import pandas as pd
 
-# ---- Hard-coded config (simple, explicit) ----
-# MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"
-# MODEL_NAME          = "iris-classifier"
-# MODEL_VERSION       = "1"
-
-# MODEL_URI = f"models:/{MODEL_NAME}/{MODEL_VERSION}"
-# model = mlflow.pyfunc.load_model(MODEL_URI)
-
 # ----- Config -----
 MODEL_VERSION       = "2"
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000") # update ip when running MLFlow
 MODEL_NAME = os.getenv("MODEL_NAME", "iris-classifier")
-DEFAULT_MODEL_VERSION = int(os.getenv("MODEL_VERSION", "2")) # optional: seed a default on first boot, otherwise get the latest
+DEFAULT_MODEL_VERSION = int(os.getenv("MODEL_VERSION", "1")) # seed a default on first boot, otherwise get the latest
 STATE_PATH = os.getenv("MODEL_STATE_PATH", "./model_state.json")
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
@@ -68,8 +60,7 @@ class ModelState(BaseModel):
     model_name: str
     version: int
     uri: str
-    loaded_at: float
-    
+
 class SelectVersionRequest(BaseModel):
     version: int = Field(..., gt=0)
 
@@ -113,7 +104,7 @@ class VersionedModelManager:
             persisted = self._load_state_file()
             if persisted:
                 candidates.append(persisted.version)
-            # default from env (yours was hard-coded "1")
+            # default from env
             if self.default_version not in candidates:
                 candidates.append(self.default_version)
             # latest in registry
@@ -130,7 +121,7 @@ class VersionedModelManager:
                     uri, model = self._load_model(v)
                     self._model = model
                     self._state = ModelState(
-                        model_name=self.model_name, version=int(v), uri=uri, loaded_at=time.time()    
+                        model_name=self.model_name, version=int(v), uri=uri
                     )
                     self._persist(self._state)
                     return
@@ -150,14 +141,14 @@ class VersionedModelManager:
         except Exception:
             raise HTTPException(status_code=404, detail=f"Version {version} not found for {self.model_name}")
         
-        # Load new model first; then swap under lock (so we don't drop live traffic)
+        # Load new model first; then swap under lock
         uri, new_model = self._load_model(version)
         with self._lock:
             prev_model, prev_state = self._model, self._state
             try:
                 self._model = new_model
                 self._state = ModelState(
-                    model_name = self.model_name, version=int(version), uri=uri, loaded_at=time.time()    
+                    model_name = self.model_name, version=int(version), uri=uri 
                 )
                 self._persist(self._state)
                 return self._state
